@@ -73,10 +73,18 @@ function normalizeField(field) {
  * Helper to process AI extraction asynchronously
  */
 async function processExtraction(uploadId, filePath, mimetype) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const isSandbox = !apiKey || apiKey.trim() === '';
+
   try {
     // Call Gemini Extractor
     const extractedData = await extractOperationalData(filePath, mimetype);
     
+    // Check if we extracted any rows
+    if (!extractedData.rows || extractedData.rows.length === 0) {
+      throw new Error('Unrelated document format or invalid table structure detected. No operational rows could be identified.');
+    }
+
     // Normalize rows array from Gemini
     const normalizedRows = (extractedData.rows || []).map(row => ({
       date: normalizeField(row.date),
@@ -109,40 +117,57 @@ async function processExtraction(uploadId, filePath, mimetype) {
 
     console.log(`Successfully completed extraction for upload ID: ${uploadId}`);
   } catch (error) {
-    console.error(`AI Extraction failed for upload ID: ${uploadId}. Falling back to mock data...`, error);
-    try {
-      const mockData = mockExtract();
-      const normalizedRows = (mockData.rows || []).map(row => ({
-        date: normalizeField(row.date),
-        shift: normalizeField(row.shift),
-        employeeNumber: normalizeField(row.employeeNumber),
-        operationCode: normalizeField(row.operationCode),
-        machineNumber: normalizeField(row.machineNumber),
-        workOrderNumber: normalizeField(row.workOrderNumber),
-        quantityProduced: normalizeField(row.quantityProduced),
-        timeTaken: normalizeField(row.timeTaken)
-      }));
+    console.error(`AI Extraction failed for upload ID: ${uploadId}.`, error);
+    
+    if (isSandbox) {
+      // ONLY fall back to mock data in Sandbox Mode (no API key configured)
+      console.log('Sandbox Mode active. Applying fallback mock data...');
+      try {
+        const mockData = mockExtract();
+        const normalizedRows = (mockData.rows || []).map(row => ({
+          date: normalizeField(row.date),
+          shift: normalizeField(row.shift),
+          employeeNumber: normalizeField(row.employeeNumber),
+          operationCode: normalizeField(row.operationCode),
+          machineNumber: normalizeField(row.machineNumber),
+          workOrderNumber: normalizeField(row.workOrderNumber),
+          quantityProduced: normalizeField(row.quantityProduced),
+          timeTaken: normalizeField(row.timeTaken)
+        }));
 
-      const normalizedData = {
-        rows: normalizedRows,
-        isMock: true,
-        fallbackDueToError: true
-      };
+        const normalizedData = {
+          rows: normalizedRows,
+          isMock: true,
+          fallbackDueToError: true
+        };
 
-      const allUploads = db.getAllUploads();
-      const validationErrors = validateRecord(normalizedData, allUploads, uploadId);
-      validationErrors.push({ field: 'general', message: 'Note: Live AI extraction failed (API limits/503). Showing simulated results.' });
+        const allUploads = db.getAllUploads();
+        const validationErrors = validateRecord(normalizedData, allUploads, uploadId);
+        validationErrors.push({ field: 'general', message: 'Note: Live AI extraction failed (API limits/503). Showing simulated results.' });
 
-      db.updateUpload(uploadId, {
-        status: 'Pending Review',
-        extractedData: normalizedData,
-        validationErrors: validationErrors
-      });
-    } catch (fallbackError) {
-      console.error('Fallback extraction also failed:', fallbackError);
+        db.updateUpload(uploadId, {
+          status: 'Pending Review',
+          extractedData: normalizedData,
+          validationErrors: validationErrors
+        });
+      } catch (fallbackError) {
+        console.error('Fallback extraction also failed:', fallbackError);
+        db.updateUpload(uploadId, {
+          status: 'Failed',
+          validationErrors: [{ field: 'general', message: 'Failed to extract data. Both live and mock extraction failed.' }]
+        });
+      }
+    } else {
+      // If a real API key is configured, fail hard and show a helpful error message
+      const errMsg = error.message || 'AI extraction failed. Please verify the document format is correct and legible.';
       db.updateUpload(uploadId, {
         status: 'Failed',
-        validationErrors: [{ field: 'general', message: 'Failed to extract data. Both live and mock extraction failed.' }]
+        validationErrors: [{ 
+          field: 'general', 
+          message: errMsg.includes('API key') || errMsg.includes('key')
+            ? 'API key validation failed. Please check your GEMINI_API_KEY environment variable.'
+            : errMsg 
+        }]
       });
     }
   }
