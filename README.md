@@ -1,3 +1,13 @@
+---
+title: BiztelAI Workflow Automation
+emoji: 📈
+colorFrom: indigo
+colorTo: cyan
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # BiztelAI Operational Workflow Automation System
 
 An AI-native web application prototype designed to digitize handwritten, semi-structured operational manufacturing documents and convert them into reviewable operational records with business rule validations and real-time dashboard analytics.
