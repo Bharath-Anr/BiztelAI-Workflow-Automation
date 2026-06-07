@@ -1,23 +1,28 @@
-# AI Workflow Documentation
+# AI-Assisted Engineering Workflow Documentation
 
-This document summarizes the AI-assisted engineering workflows used to build the **AI-Powered Workflow Automation System**.
+This document explains the AI-assisted methodologies, tools, prompting strategies, debugging cycles, and engineering decisions made during the development of the **BiztelAI Flow** monorepo application.
 
 ---
 
 ## 🛠️ AI Developer Ecosystem Used
 
-1. **Antigravity AI Agent**: Used as the primary pair programmer for structural code generation, architecture planning, and debugging.
-2. **Gemini 2.5 Flash API**: Integrated into the backend application to perform multimodal operational data OCR and confidence scoring.
+During the lifecycle of this project, we leveraged the following AI tools and models:
+
+1. **Antigravity AI Agent (powered by Google DeepMind)**:
+   - **Role**: Primary autonomous engineering partner.
+   - **How it was used**: Executed code search, managed package builds, performed JSX tag analysis, wrote the multi-row validation engine, redesigned the Operations Dashboard using vanilla HSL CSS tokens, and implemented robust error handling.
+2. **Gemini 2.5 Flash API**:
+   - **Role**: Multimodal log sheet OCR and table extraction engine.
+   - **How it was used**: Processes uploaded images/PDF logs to extract structured JSON data, identify handwritten fields, compute confidence scores, and provide legibility explanation reasons.
 
 ---
 
-## 💡 Prompt Engineering & AI Ingestion Strategy
+## 💡 Prompting and Data Ingestion Strategy
 
-To extract operational data from unstructured documents, we designed a structured JSON-output prompt sent to **Gemini 2.5 Flash** along with the document bytes:
+To extract operational data from unstructured handwritten log sheets, we designed a structured system prompt sent to **Gemini 2.5 Flash** with the base64 encoded document bytes.
 
-### 1. The System Instruction Prompt
-We instructed the model to act as a log sheet digitizer, returning a nested JSON structure for each row that captures the value, a confidence rating between 0 and 1, and a handwriting explanation reason if confidence is low (<0.80):
-
+### 1. System Prompt Constraints
+We instructed the model to act as an expert log sheet digitizer, returning a structured JSON format conforming to this layout:
 ```json
 {
   "rows": [
@@ -35,19 +40,34 @@ We instructed the model to act as a log sheet digitizer, returning a nested JSON
 }
 ```
 
-### 2. Output Constraint & Prompt Controls
-To prevent parsing failures on the Express backend, the prompt requires returning *only* the JSON block. We configured the Gemini API's `generationConfig` with `responseMimeType: "application/json"`, enforcing schema compliance at the API layer. We explicitly instruct the model to output a hyphen (`"-"`) for blank quantity records (indicating nil production) to pass validation checks.
+### 2. Prompt Safety Guards
+- **Unrelated Document Rejection**: Explicit instructions were added telling the model to return an empty rows array `{"rows": []}` for invoices, receipts, cat/dog photos, or generic text documents to guarantee a clean pipeline failure.
+- **Null Value Standardization**: The model was directed to map blank quantities or dashes as `"-"` rather than empty strings, ensuring custom business validations evaluate successfully.
+- **JSON Output Mode**: We leveraged Gemini's `responseMimeType: "application/json"` parameter to prevent raw text block wrapper hallucinations (e.g. markdown code blocks ` ```json `), avoiding parsing failures.
+
+---
+
+## 🔄 Debugging and Resilience Workflows
+
+### 1. API Quota & Rate Limit Resilience (RESOURCE_EXHAUSTED)
+- **Problem**: When testing the application under Google's shared/free-tier limits, the Gemini API can throw a `RESOURCE_EXHAUSTED` (Quota exceeded) error.
+- **Debugging**: We analyzed the API JSON error responses and built an automatic demo fallback directly into the server's extraction handler (`server/server.js`).
+- **Solution**: If the API fails with `RESOURCE_EXHAUSTED` or rate limit errors, the system intercepts the error, falls back to simulated mock logs, and flags a dashboard warning: `"Demo Mode: Live API daily quota exceeded. Showing simulated extraction results."` This prevents the app from failing hard and preserves the demo flow.
+
+### 2. Syntax and JSX Tag Matching Errors
+- **Problem**: Misplaced tag closes caused compilation failures in the frontend bundler (e.g., `Expected "}" but found ";"` in `ReviewPanel.jsx` during Vite build).
+- **Debugging**: We ran the Vite production compiler (`npm run build --prefix client`) via the CLI to catch esbuild syntax warnings, traced open JSX components, and resolved the tag structure immediately.
 
 ---
 
 ## 🚀 Impact Analysis of AI-Assisted Engineering
 
 ### Areas Where AI Accelerated Development Most:
-1. **Core Scaffolding & Setup**: The monorepo setup (root `package.json`, Vite configuration, backend structure, and npm dependencies scripts) was generated and verified in seconds.
-2. **Custom CSS Glassmorphism**: Generating design system tokens, CSS scrollbars, layout transitions, and dashboard animations from scratch without relying on complex, heavy external dependencies (like Tailwind/Material UI).
-3. **Data Validations Engine**: Formulating checks for machine IDs, operation codes, duplicates, and suspicious numerical values.
+- **HSL-Based Styling**: Generating the CSS tokens, glassmorphism dashboard grid layout, custom progress widgets, and SVG charts without external CSS framework overhead.
+- **Checklist Management**: Breaking down multi-row migrations, nested field schema changes, and UI inspection requirements into incremental checklists tracked in `task.md`.
+- **Validation Engine**: Translating complex rules (e.g. Roman numeral shifts, duplicate work order checks, suspiciously high quantities, and nil-production cases) into high-fidelity unit tests.
 
-### Areas Requiring Manual Oversight / Engineering:
-1. **Sandbox Mock Fallback Design**: Devising a mock extraction engine that runs when the `GEMINI_API_KEY` is not present, allowing the grader to test all validation banners and dashboard components immediately.
-2. **Vite Reverse Proxy Routing**: Manually configuring Vite proxies to direct `/api` and `/uploads` calls to port 5001, resolving potential CORS issues during local execution.
-3. **PDF Preview Iframe Parameters**: Ensuring the PDF renderer toolbar is hidden and scales correctly inside the side-by-side flex layout.
+### Areas Requiring Manual Intervention:
+- **Sandbox Simulation Architecture**: Implementing a system to check if an uploaded file has `unrelated` or `fail` in the filename to simulate pipeline failure states on demand without requiring active API calls.
+- **Git Push Operations**: Standardizing changes and committing them safely while leaving secret environment configuration files (`.env`) excluded from source control.
+- **Vite Reverse Proxy Settings**: Routing backend port mappings (`/api`, `/uploads`) to prevent cross-origin resource sharing (CORS) exceptions.

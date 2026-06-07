@@ -79,7 +79,7 @@ async function processExtraction(uploadId, filePath, mimetype, originalName = ''
   try {
     // Call Gemini Extractor
     const extractedData = await extractOperationalData(filePath, mimetype, originalName);
-    
+
     // Check if we extracted any rows
     if (!extractedData.rows || extractedData.rows.length === 0) {
       throw new Error('Unrelated document format or invalid table structure detected. No operational rows could be identified.');
@@ -104,7 +104,7 @@ async function processExtraction(uploadId, filePath, mimetype, originalName = ''
 
     // Retrieve database uploads for duplicate checks
     const allUploads = db.getAllUploads();
-    
+
     // Run Validation Engine
     const validationErrors = validateRecord(normalizedData, allUploads, uploadId);
 
@@ -118,7 +118,7 @@ async function processExtraction(uploadId, filePath, mimetype, originalName = ''
     console.log(`Successfully completed extraction for upload ID: ${uploadId}`);
   } catch (error) {
     console.error(`AI Extraction failed for upload ID: ${uploadId}.`, error);
-    
+
     const isUnrelated = error.message.includes('Unrelated document format') || error.message.includes('invalid table structure');
 
     if (isSandbox && !isUnrelated) {
@@ -164,11 +164,11 @@ async function processExtraction(uploadId, filePath, mimetype, originalName = ''
       const errMsg = error.message || 'AI extraction failed. Please verify the document format is correct and legible.';
       db.updateUpload(uploadId, {
         status: 'Failed',
-        validationErrors: [{ 
-          field: 'general', 
+        validationErrors: [{
+          field: 'general',
           message: errMsg.includes('API key') || errMsg.includes('key')
             ? 'API key validation failed. Please check your GEMINI_API_KEY environment variable.'
-            : errMsg 
+            : errMsg
         }]
       });
     }
