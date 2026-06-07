@@ -212,7 +212,14 @@ export default function ReviewPanel({ uploadId, allUploads, onBack, onSaveSucces
             <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '16px', borderRadius: '50%', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
               <AlertTriangle size={48} className="text-error" />
             </div>
-            <h4 style={{ color: 'white', fontSize: '1.1rem', fontWeight: 600 }}>Unrelated Document Format</h4>
+            <h4 style={{ color: 'white', fontSize: '1.1rem', fontWeight: 600 }}>
+              {record.validationErrors?.[0]?.message?.includes('503') || 
+               record.validationErrors?.[0]?.message?.includes('demand') || 
+               record.validationErrors?.[0]?.message?.includes('UNAVAILABLE') ||
+               record.validationErrors?.[0]?.message?.includes('API key')
+                ? 'AI Service Error'
+                : 'Unrelated Document Format'}
+            </h4>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: '1.5', maxWidth: '320px' }}>
               {record.validationErrors?.[0]?.message || 'We could not process this document. Please verify the file is a valid operational log sheet and is fully legible.'}
             </p>
